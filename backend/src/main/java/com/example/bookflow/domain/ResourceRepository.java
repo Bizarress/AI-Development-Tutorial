@@ -56,4 +56,20 @@ public interface ResourceRepository extends JpaRepository<Resource, UUID> {
 
   /** リソースをカテゴリで絞り込んで全件返す（inactive 含む・from/to フィルタ用）。 */
   List<Resource> findByCategory(ResourceCategory category);
+
+  // ---- name キーワード検索（大文字小文字区別なし・部分一致）----
+
+  /** 有効リソースを名前で絞り込んでページネーションで返す。 */
+  Page<Resource> findByNameContainingIgnoreCaseAndIsActiveTrue(String name, Pageable pageable);
+
+  /** 有効リソースを名前・カテゴリで絞り込んでページネーションで返す。 */
+  Page<Resource> findByNameContainingIgnoreCaseAndCategoryAndIsActiveTrue(
+      String name, ResourceCategory category, Pageable pageable);
+
+  /** リソースを名前で絞り込んでページネーションで返す（inactive 含む・ADMIN 用）。 */
+  Page<Resource> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+  /** リソースを名前・カテゴリで絞り込んでページネーションで返す（inactive 含む・ADMIN 用）。 */
+  Page<Resource> findByNameContainingIgnoreCaseAndCategory(
+      String name, ResourceCategory category, Pageable pageable);
 }

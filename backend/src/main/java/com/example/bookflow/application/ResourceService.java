@@ -60,8 +60,10 @@ public class ResourceService {
    * リソース一覧を返す。
    *
    * <p>ADMIN は {@code is_active = false} のリソースも含む。 {@code from} / {@code to} を指定した場合は、当該時間帯に {@code
-   * PENDING} / {@code APPROVED} の予約が存在するリソースを除外する（Java 側で重複判定）。
+   * PENDING} / {@code APPROVED} の予約が存在するリソースを除外する（Java 側で重複判定）。 {@code name}
+   * を指定した場合はリソース名の部分一致（大文字小文字区別なし）でフィルタする。
    *
+   * @param name 名前フィルタ（null または空文字の場合はフィルタしない）
    * @param category カテゴリフィルタ（null の場合は全カテゴリ）
    * @param from 空き確認の開始日時（null の場合はフィルタしない）
    * @param to 空き確認の終了日時（null の場合はフィルタしない）
@@ -71,31 +73,50 @@ public class ResourceService {
    */
   @Transactional(readOnly = true)
   public Page<ResourceResponse> list(
+      String name,
       ResourceCategory category,
       LocalDateTime from,
       LocalDateTime to,
       boolean isAdmin,
       Pageable pageable) {
     if (from != null && to != null) {
-      return listWithAvailabilityFilter(category, from, to, isAdmin, pageable);
+      return listWithAvailabilityFilter(name, category, from, to, isAdmin, pageable);
     }
-    return listPaginated(category, isAdmin, pageable);
+    return listPaginated(name, category, isAdmin, pageable);
   }
 
   /** from/to 指定なし：通常ページネーション。 */
   private Page<ResourceResponse> listPaginated(
-      ResourceCategory category, boolean isAdmin, Pageable pageable) {
+      String name, ResourceCategory category, boolean isAdmin, Pageable pageable) {
+    boolean hasName = name != null && !name.isBlank();
     Page<Resource> page;
     if (isAdmin) {
-      page =
-          category != null
-              ? resourceRepository.findByCategory(category, pageable)
-              : resourceRepository.findAll(pageable);
+      if (hasName) {
+        page =
+            category != null
+                ? resourceRepository.findByNameContainingIgnoreCaseAndCategory(
+                    name, category, pageable)
+                : resourceRepository.findByNameContainingIgnoreCase(name, pageable);
+      } else {
+        page =
+            category != null
+                ? resourceRepository.findByCategory(category, pageable)
+                : resourceRepository.findAll(pageable);
+      }
     } else {
-      page =
-          category != null
-              ? resourceRepository.findByCategoryAndIsActiveTrue(category, pageable)
-              : resourceRepository.findByIsActiveTrue(pageable);
+      if (hasName) {
+        page =
+            category != null
+                ? resourceRepository.findByNameContainingIgnoreCaseAndCategoryAndIsActiveTrue(
+                    name, category, pageable)
+                : resourceRepository.findByNameContainingIgnoreCaseAndIsActiveTrue(
+                    name, pageable);
+      } else {
+        page =
+            category != null
+                ? resourceRepository.findByCategoryAndIsActiveTrue(category, pageable)
+                : resourceRepository.findByIsActiveTrue(pageable);
+      }
     }
     return page.map(ResourceResponse::from);
   }
@@ -103,9 +124,10 @@ public class ResourceService {
   /**
    * from/to 指定あり：全候補を取得し Java で重複判定してから手動ページネーション。
    *
-   * <p>重複するリソース ID を一括取得（1 クエリ）し、候補リストから除外する。
+   * <p>重複するリソース ID を一括取得（1 クエリ）し、候補リストから除外する。 name が指定された場合は候補取得後に Java stream で部分一致フィルタを適用する。
    */
   private Page<ResourceResponse> listWithAvailabilityFilter(
+      String name,
       ResourceCategory category,
       LocalDateTime from,
       LocalDateTime to,
@@ -114,7 +136,16 @@ public class ResourceService {
     // 1. 候補リソースを全取得（ページネーション前）
     List<Resource> candidates = fetchAllCandidates(category, isAdmin);
 
-    // 2. 候補のうち占有済み予約があるリソース ID を特定（1 クエリ）
+    // 2. name フィルタ（大文字小文字区別なし・部分一致）
+    if (name != null && !name.isBlank()) {
+      String nameLower = name.toLowerCase();
+      candidates =
+          candidates.stream()
+              .filter(r -> r.getName().toLowerCase().contains(nameLower))
+              .toList();
+    }
+
+    // 3. 候補のうち占有済み予約があるリソース ID を特定（1 クエリ）
     List<UUID> candidateIds = candidates.stream().map(Resource::getId).toList();
     if (!candidateIds.isEmpty()) {
       Set<UUID> occupiedIds =
@@ -127,7 +158,7 @@ public class ResourceService {
       candidates = candidates.stream().filter(r -> !occupiedIds.contains(r.getId())).toList();
     }
 
-    // 3. フィルタ後リストを手動ページネーション
+    // 4. フィルタ後リストを手動ページネーション
     int total = candidates.size();
     int start = (int) pageable.getOffset();
     int end = Math.min(start + pageable.getPageSize(), total);

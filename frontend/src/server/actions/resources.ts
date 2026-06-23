@@ -16,6 +16,7 @@ import type { CreateResourceInput, UpdateResourceInput } from "@/lib/schemas/res
 // ---------------------------------------------------------------------------
 
 interface ListResourcesParams {
+  name?: string;
   category?: string;
   from?: string;
   to?: string;
@@ -36,6 +37,7 @@ interface ListResourcesParams {
 export async function listResourcesAction(params?: ListResourcesParams) {
   const client = createApiClient(getAccessToken);
   const queryParams: Record<string, string> = {};
+  if (params?.name) queryParams.name = params.name;
   if (params?.category) queryParams.category = params.category;
   if (params?.from) queryParams.from = params.from;
   if (params?.to) queryParams.to = params.to;

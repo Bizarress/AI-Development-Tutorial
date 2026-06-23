@@ -27,3 +27,19 @@ timestamp: 2026-06-18
 ---
 
 -->
+
+## Requirements Analysis
+**Timestamp**: 2026-06-23T09:00:00+09:00
+**User Input**: "追加したい検索・フィルタ項目: キーワード検索（名前）。BE変更スコープ: FE+BE両方。テスト追加: あり（ユーザー指摘による）"
+**AI Response**: "キーワード検索（name パラメータ・部分一致）を FE+BE 両方に実装。BE: ResourceRepository に4メソッド追加、ResourceService に name 分岐追加、ResourceController に @RequestParam 追加。FE: Server Action・ResourceFilterForm・page.tsx 更新。テスト: ResourceServiceTest・ResourceControllerTest・resources.test.ts 追加。全テスト・ビルド PASS。"
+**Context**: CONSTRUCTION - Code Generation 完了。
+
+---
+
+## Workspace Detection
+**Timestamp**: 2026-06-23T00:00:00+09:00
+**User Input**: "本リポジトリにおけるAI-DLCのワークフローに従い、リソース一覧の検索・フィルタ追加のエンハンスを進めたい"
+**AI Response**: "AI-DLCワークフロー発動。Brownfieldプロジェクト確認。既存 /resources 画面はカテゴリ・from/to フィルタ・ページネーション実装済み。エンハンス要件を明確化するため Requirements Analysis フェーズへ移行。plan mode を起動。"
+**Context**: INCEPTION - Workspace Detection。Brownfield。既存 RE artifacts なし（初回）。
+
+---

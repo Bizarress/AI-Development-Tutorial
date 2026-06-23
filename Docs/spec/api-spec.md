@@ -285,6 +285,7 @@ Authorization: Bearer <JWT>
 
 | パラメータ | 型 | 必須 | 説明 |
 |------------|-----|------|------|
+| `name` | string | ❌ | リソース名の部分一致フィルタ（大文字小文字区別なし） |
 | `category` | string | ❌ | `ROOM` / `EQUIPMENT` / `VEHICLE` でフィルタ |
 | `from` | TIMESTAMP | ❌ | 空き確認の開始日時（`to` と同時指定必須） |
 | `to` | TIMESTAMP | ❌ | 空き確認の終了日時（`from` と同時指定必須） |

@@ -9,6 +9,7 @@ import { PaginationNav } from "@/components/ui/pagination-nav";
 import { RESOURCE_CATEGORY_LABELS } from "@/lib/labels";
 
 interface SearchParams {
+  name?: string;
   category?: string;
   from?: string;
   to?: string;
@@ -31,6 +32,7 @@ export default async function ResourcesPage({
   const isAdmin = profile.role === "ADMIN";
 
   const resources = await listResourcesAction({
+    name: params.name,
     category: params.category,
     from: params.from,
     to: params.to,
@@ -55,6 +57,7 @@ export default async function ResourcesPage({
 
       {/* フィルタフォーム */}
       <ResourceFilterForm
+        defaultName={params.name}
         defaultCategory={params.category}
         defaultFrom={params.from}
         defaultTo={params.to}

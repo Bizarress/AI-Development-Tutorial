@@ -52,6 +52,48 @@ describe("listResourcesAction", () => {
     expect(result.content).toHaveLength(1);
   });
 
+  it("正常時: name パラメータを渡せる", async () => {
+    let capturedUrl: string | undefined;
+    server.use(
+      http.get("/api/backend/resources", ({ request }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json({
+          content: [MOCK_RESOURCE_RESPONSE],
+          totalElements: 1,
+          totalPages: 1,
+          number: 0,
+          size: 20,
+          first: true,
+          last: true,
+        });
+      }),
+    );
+
+    await listResourcesAction({ name: "会議" });
+    expect(capturedUrl).toContain("name=%E4%BC%9A%E8%AD%B0");
+  });
+
+  it("name が未指定の場合: queryParams に name を含まない", async () => {
+    let capturedUrl: string | undefined;
+    server.use(
+      http.get("/api/backend/resources", ({ request }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json({
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+          number: 0,
+          size: 20,
+          first: true,
+          last: true,
+        });
+      }),
+    );
+
+    await listResourcesAction({ category: "ROOM" });
+    expect(capturedUrl).not.toContain("name=");
+  });
+
   it("401 時: ApiClientError をスローする", async () => {
     server.use(
       http.get("/api/backend/resources", () => {

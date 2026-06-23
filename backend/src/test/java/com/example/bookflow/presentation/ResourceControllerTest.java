@@ -197,6 +197,47 @@ class ResourceControllerTest extends BaseControllerTest {
         .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
   }
 
+  @Test
+  @WithMockMember
+  void list_withNameParam_returnsFilteredResources() throws Exception {
+    // "会議" を含む名前 → 第1会議室のみ一致
+    mockMvc
+        .perform(
+            get("/api/resources")
+                .param("name", "会議")
+                .accept(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content[?(@.id == '" + ACTIVE_RESOURCE_ID + "')]").exists())
+        .andExpect(jsonPath("$.content[?(@.id == '" + INACTIVE_RESOURCE_ID + "')]").doesNotExist());
+  }
+
+  @Test
+  @WithMockMember
+  void list_withNameAndCategory_returnsFiltered() throws Exception {
+    // "会議" + category=ROOM → 第1会議室のみ一致
+    mockMvc
+        .perform(
+            get("/api/resources")
+                .param("name", "会議")
+                .param("category", "ROOM")
+                .accept(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content[?(@.id == '" + ACTIVE_RESOURCE_ID + "')]").exists());
+  }
+
+  @Test
+  @WithMockMember
+  void list_withNameNotMatching_returnsEmptyContent() throws Exception {
+    // "存在しない名前" → 結果 0 件
+    mockMvc
+        .perform(
+            get("/api/resources")
+                .param("name", "存在しない名前XYZ")
+                .accept(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.totalElements").value(0));
+  }
+
   // ---------------------------------------------------------------------------
   // POST /api/resources — 登録
   // ---------------------------------------------------------------------------
