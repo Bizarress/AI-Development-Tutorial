@@ -20,6 +20,47 @@ import org.springframework.data.repository.query.Param;
  */
 public interface ResourceRepository extends JpaRepository<Resource, UUID> {
 
+  // ---- キーワード検索（MEMBER 用・is_active = true のみ）----
+
+  /** 有効リソースをキーワードで絞り込んでページネーションで返す（カテゴリ指定なし）。 */
+  @Query(
+      "SELECT r FROM Resource r WHERE r.isActive = true"
+          + " AND (LOWER(r.name) LIKE :pattern"
+          + "      OR (r.description IS NOT NULL"
+          + "          AND LOWER(r.description) LIKE :pattern))")
+  Page<Resource> findByIsActiveTrueAndKeyword(@Param("pattern") String pattern, Pageable pageable);
+
+  /** 有効リソースをカテゴリ＋キーワードで絞り込んでページネーションで返す。 */
+  @Query(
+      "SELECT r FROM Resource r WHERE r.isActive = true AND r.category = :category"
+          + " AND (LOWER(r.name) LIKE :pattern"
+          + "      OR (r.description IS NOT NULL"
+          + "          AND LOWER(r.description) LIKE :pattern))")
+  Page<Resource> findByCategoryAndIsActiveTrueAndKeyword(
+      @Param("category") ResourceCategory category,
+      @Param("pattern") String pattern,
+      Pageable pageable);
+
+  // ---- キーワード検索（ADMIN 用・inactive 含む）----
+
+  /** 全リソースをキーワードで絞り込んでページネーションで返す（inactive 含む・カテゴリ指定なし）。 */
+  @Query(
+      "SELECT r FROM Resource r"
+          + " WHERE LOWER(r.name) LIKE :pattern"
+          + " OR (r.description IS NOT NULL AND LOWER(r.description) LIKE :pattern)")
+  Page<Resource> findAllByKeyword(@Param("pattern") String pattern, Pageable pageable);
+
+  /** 全リソースをカテゴリ＋キーワードで絞り込んでページネーションで返す（inactive 含む）。 */
+  @Query(
+      "SELECT r FROM Resource r WHERE r.category = :category"
+          + " AND (LOWER(r.name) LIKE :pattern"
+          + "      OR (r.description IS NOT NULL"
+          + "          AND LOWER(r.description) LIKE :pattern))")
+  Page<Resource> findByCategoryAndKeyword(
+      @Param("category") ResourceCategory category,
+      @Param("pattern") String pattern,
+      Pageable pageable);
+
   // ---- 悲観ロック（重複予約の直列化） ----
 
   /**

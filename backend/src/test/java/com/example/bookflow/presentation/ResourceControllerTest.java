@@ -197,6 +197,30 @@ class ResourceControllerTest extends BaseControllerTest {
         .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
   }
 
+  @Test
+  @WithMockMember
+  void list_withKeyword_returnsMatchingResourcesOnly() throws Exception {
+    // "第1会議室" は "会議室" を含む → ヒット。"旧備品A" は含まない → 非ヒット（inactive でもあるが）
+    mockMvc
+        .perform(get("/api/resources").param("keyword", "会議室").accept(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content[?(@.id == '" + ACTIVE_RESOURCE_ID + "')]").exists())
+        .andExpect(jsonPath("$.content[?(@.name =~ /.*会議室.*/)]").exists());
+  }
+
+  @Test
+  @WithMockMember
+  void list_withKeywordNoMatch_returnsEmptyContent() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/resources")
+                .param("keyword", "存在しないキーワードXYZ")
+                .accept(MediaType.APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content").isArray())
+        .andExpect(jsonPath("$.totalElements").value(0));
+  }
+
   // ---------------------------------------------------------------------------
   // POST /api/resources — 登録
   // ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ public class ReservationController {
    */
   @GetMapping
   public Page<ReservationResponse> list(
-      @RequestParam(required = false) List<ReservationStatus> status,
+      @RequestParam(name = "status", required = false) List<ReservationStatus> status,
       @PageableDefault(size = 20) Pageable pageable,
       @CurrentUser User currentUser) {
     return reservationService.list(currentUser, status, pageable);

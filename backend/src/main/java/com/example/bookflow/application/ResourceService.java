@@ -14,6 +14,7 @@ import com.example.bookflow.presentation.dto.UpdateResourceRequest;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -60,12 +61,14 @@ public class ResourceService {
    * リソース一覧を返す。
    *
    * <p>ADMIN は {@code is_active = false} のリソースも含む。 {@code from} / {@code to} を指定した場合は、当該時間帯に {@code
-   * PENDING} / {@code APPROVED} の予約が存在するリソースを除外する（Java 側で重複判定）。
+   * PENDING} / {@code APPROVED} の予約が存在するリソースを除外する（Java 側で重複判定）。 {@code keyword} を指定した場合は {@code
+   * name} / {@code description} への大文字小文字を区別しない部分一致で絞り込む。
    *
    * @param category カテゴリフィルタ（null の場合は全カテゴリ）
    * @param from 空き確認の開始日時（null の場合はフィルタしない）
    * @param to 空き確認の終了日時（null の場合はフィルタしない）
    * @param isAdmin ADMIN ロールであれば inactive を含む
+   * @param keyword キーワード検索（null または空白の場合はフィルタしない）
    * @param pageable ページネーション
    * @return {@link ResourceResponse} のページ
    */
@@ -75,33 +78,61 @@ public class ResourceService {
       LocalDateTime from,
       LocalDateTime to,
       boolean isAdmin,
+      String keyword,
       Pageable pageable) {
+    String normalizedKeyword = normalizeKeyword(keyword);
     if (from != null && to != null) {
-      return listWithAvailabilityFilter(category, from, to, isAdmin, pageable);
+      return listWithAvailabilityFilter(category, from, to, isAdmin, normalizedKeyword, pageable);
     }
-    return listPaginated(category, isAdmin, pageable);
+    return listPaginated(category, isAdmin, normalizedKeyword, pageable);
   }
 
-  /** from/to 指定なし：通常ページネーション。 */
+  /** null または空白を null に正規化する。 */
+  private static String normalizeKeyword(String keyword) {
+    return (keyword == null || keyword.isBlank()) ? null : keyword;
+  }
+
+  /** keyword を LIKE パターン（%keyword%、小文字化済み）に変換する。null の場合は null のまま返す。 */
+  private static String toKeywordPattern(String keyword) {
+    return keyword == null ? null : "%" + keyword.toLowerCase(Locale.ROOT) + "%";
+  }
+
+  /** from/to 指定なし：条件に応じたリポジトリメソッドを選択してページネーション。 */
   private Page<ResourceResponse> listPaginated(
-      ResourceCategory category, boolean isAdmin, Pageable pageable) {
+      ResourceCategory category, boolean isAdmin, String keyword, Pageable pageable) {
     Page<Resource> page;
-    if (isAdmin) {
-      page =
-          category != null
-              ? resourceRepository.findByCategory(category, pageable)
-              : resourceRepository.findAll(pageable);
+    if (keyword != null) {
+      String pattern = toKeywordPattern(keyword);
+      if (isAdmin) {
+        page =
+            category != null
+                ? resourceRepository.findByCategoryAndKeyword(category, pattern, pageable)
+                : resourceRepository.findAllByKeyword(pattern, pageable);
+      } else {
+        page =
+            category != null
+                ? resourceRepository.findByCategoryAndIsActiveTrueAndKeyword(
+                    category, pattern, pageable)
+                : resourceRepository.findByIsActiveTrueAndKeyword(pattern, pageable);
+      }
     } else {
-      page =
-          category != null
-              ? resourceRepository.findByCategoryAndIsActiveTrue(category, pageable)
-              : resourceRepository.findByIsActiveTrue(pageable);
+      if (isAdmin) {
+        page =
+            category != null
+                ? resourceRepository.findByCategory(category, pageable)
+                : resourceRepository.findAll(pageable);
+      } else {
+        page =
+            category != null
+                ? resourceRepository.findByCategoryAndIsActiveTrue(category, pageable)
+                : resourceRepository.findByIsActiveTrue(pageable);
+      }
     }
     return page.map(ResourceResponse::from);
   }
 
   /**
-   * from/to 指定あり：全候補を取得し Java で重複判定してから手動ページネーション。
+   * from/to 指定あり：全候補を取得し Java で重複判定・keyword フィルタしてから手動ページネーション。
    *
    * <p>重複するリソース ID を一括取得（1 クエリ）し、候補リストから除外する。
    */
@@ -110,11 +141,25 @@ public class ResourceService {
       LocalDateTime from,
       LocalDateTime to,
       boolean isAdmin,
+      String keyword,
       Pageable pageable) {
-    // 1. 候補リソースを全取得（ページネーション前）
+    // 1. 候補リソースを全取得（ページネーション前・keyword なし）
     List<Resource> candidates = fetchAllCandidates(category, isAdmin);
 
-    // 2. 候補のうち占有済み予約があるリソース ID を特定（1 クエリ）
+    // 2. keyword フィルタ（Java Stream）
+    if (keyword != null) {
+      String lowerKw = keyword.toLowerCase(Locale.ROOT);
+      candidates =
+          candidates.stream()
+              .filter(
+                  r ->
+                      r.getName().toLowerCase(Locale.ROOT).contains(lowerKw)
+                          || (r.getDescription() != null
+                              && r.getDescription().toLowerCase(Locale.ROOT).contains(lowerKw)))
+              .toList();
+    }
+
+    // 3. 候補のうち占有済み予約があるリソース ID を特定（1 クエリ）
     List<UUID> candidateIds = candidates.stream().map(Resource::getId).toList();
     if (!candidateIds.isEmpty()) {
       Set<UUID> occupiedIds =
@@ -127,7 +172,7 @@ public class ResourceService {
       candidates = candidates.stream().filter(r -> !occupiedIds.contains(r.getId())).toList();
     }
 
-    // 3. フィルタ後リストを手動ページネーション
+    // 4. フィルタ後リストを手動ページネーション
     int total = candidates.size();
     int start = (int) pageable.getOffset();
     int end = Math.min(start + pageable.getPageSize(), total);
