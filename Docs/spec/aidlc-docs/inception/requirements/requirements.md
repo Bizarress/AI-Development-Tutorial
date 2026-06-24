@@ -1,152 +1,106 @@
 ---
 type: requirements
-title: Requirements — リソース一覧キーワード検索・フィルタ追加
-stage: Requirements Analysis
-status: Complete
-timestamp: 2026-06-23T00:00:00Z
-source: Docs/spec/enhancements/resource-list-filter.md + requirement-verification-questions.md
+title: Requirements — リソース一覧のソート順選択
+description: resource-list-sort エンハンスの要件定義（AI-DLC Requirements Analysis 成果物）
+tags: [ai-dlc, requirements, resource-list-sort]
+timestamp: 2026-06-24
 ---
 
-# 要件定義 — リソース一覧のキーワード検索・フィルタ追加
+# 要件定義 — リソース一覧のソート順選択
 
-## 1. インテント分析
+## Intent Analysis
 
 | 項目 | 内容 |
 |---|---|
-| **ユーザーリクエスト** | `resource-list-filter.md` に基づくキーワード検索機能の追加 |
-| **リクエスト種別** | Enhancement（既存機能の拡張） |
-| **スコープ** | Multiple Components（バックエンド3ファイル + フロントエンド1ファイル） |
-| **複雑度** | Simple（明確な実装パス、影響範囲限定） |
-| **関連ユースケース** | UC-02（リソース一覧・空き確認）の拡張 |
+| **ユーザーリクエスト** | `resource-list-sort.md` に基づくソート選択機能の追加 |
+| **Request Type** | Enhancement（既存リソース一覧機能の改善） |
+| **スコープ** | Multiple Components（バックエンド 2ファイル + フロントエンド 1ファイル） |
+| **複雑度** | Simple（Spring Data `Pageable`/`Sort` 活用で最小実装） |
 
 ---
 
-## 2. 機能要件
+## Functional Requirements
 
-### FR-01 — バックエンド: keyword パラメータ追加
+### FR-01 — バックエンド: sort クエリパラメータの追加
 
-**内容**: `GET /api/resources` に `keyword` クエリパラメータを追加する。
+**内容**: `GET /api/resources` に `sort` クエリパラメータを追加する。Spring Data 標準形式（`sort=field,direction`）を採用し、`PageableHandlerMethodArgumentResolver` がそのまま解釈できるようにする。
 
-- `keyword` が指定されている場合、`resources.name` および `resources.description` への大文字小文字を区別しない部分一致（ILIKE 相当）で絞り込む
-- `keyword` が `null` または空文字の場合はフィルタを適用しない（全件対象）
-- バリデーション: 長さ制限なし（Q1=B）。`null`・空文字のみ「フィルタなし」として特殊扱い
-
-### FR-02 — バックエンド: 2パスへのキーワード適用方式
-
-**内容**: 既存の2ルートにキーワードフィルタを組み込む方式（Q2=B）。
-
-| ルート | 条件 | キーワード適用方式 |
+| 対応フィールド | 方向 | 例 |
 |---|---|---|
-| `listPaginated` | `from`/`to` なし | DB レベル — Repository の JPQL クエリに LOWER(name) LIKE または description に対する ILIKE を追加 |
-| `listWithAvailabilityFilter` | `from`/`to` あり | Java レベル — `fetchAllCandidates` 後に `Stream.filter` でキーワードを絞り込む |
+| `name` | `asc` / `desc` | `sort=name,asc` |
+| `capacity` | `asc` / `desc` | `sort=capacity,desc` |
+| `createdAt` | `asc` / `desc` | `sort=createdAt,asc` |
 
-> **理由**: `listPaginated` は DB ページネーションを使うため DB レベルが自然。`listWithAvailabilityFilter` は全件取得後 Java フィルタのため Java Stream が一貫性を持つ。Q2=B（シンプル重視）の意図を両パスで具現化。
+- `sort` 未指定時のデフォルトは `createdAt,asc`（既存動作を維持）
+- 無効なフィールド名・方向が指定された場合はデフォルトにフォールバック（エラーにしない）
 
-### FR-03 — バックエンド: 既存フィルタとの AND 条件
+### FR-02 — バックエンド: 既存2ルートへのソート適用方式
 
-**内容**: `category`・`from`/`to`・`keyword` は AND 条件で組み合わせる（RES-04）。
+**内容**: 既存の2ルート（`listPaginated` / `listWithAvailabilityFilter`）に `sort` を組み込む。
 
-### FR-04 — フロントエンド: キーワード入力フィールドの追加
-
-**内容**: `ResourceFilterForm.tsx` にキーワード入力フィールドを追加する。
-
-- `<Input>` コンポーネントを使用（既存パターンと統一）
-- 「絞り込む」送信時に `keyword` を URL パラメータとして付与
-- キーワード未入力（空文字）の場合は `keyword` パラメータを URL に含めない
-- リセット時はキーワードもクリア（既存の `router.push("/resources")` で対応済み）
-
----
-
-## 3. 非機能要件
-
-### NFR-01 — 大文字小文字の区別なし
-
-PostgreSQL の ILIKE または `LOWER()` 変換による比較（RES-02）。
-
-### NFR-02 — 後方互換性
-
-`keyword` パラメータ未指定時の動作は既存と変わらない（既存テストがすべて pass すること）。
-
-### NFR-03 — テスト
-
-- バックエンドのユニットテスト（`ResourceServiceTest`）に keyword 検索ロジックを追加
-- 既存の `ResourceControllerTest`・`ResourceServiceTest` が引き続き pass すること
-
----
-
-## 4. セキュリティ要件（Security Baseline — Q3=A 有効）
-
-本エンハンスで特に関連するルール:
-
-| ルール | 内容 | 本エンハンスへの適用 |
+| ルート | 条件 | ソート適用方式 |
 |---|---|---|
-| **SECURITY-05** | 入力バリデーション・インジェクション防止 | `keyword` パラメータは JPA の JPQL パラメータバインド（`:keyword`）経由で使用し、文字列連結禁止 |
-| **SECURITY-08** | アプリケーション層アクセス制御 | `GET /api/resources` は認証必須の既存ルールを維持（変更なし） |
-| **SECURITY-09** | エラーハンドリング | 検索ロジックのエラーは既存の GlobalExceptionHandler で処理、スタックトレース非露出 |
+| `listPaginated` | `from`/`to` なし | DB レベル — `Pageable` に `Sort` を含めて Repository に渡す |
+| `listWithAvailabilityFilter` | `from`/`to` あり | Java レベル — `fetchAllCandidates` 後に `Comparator` でソート |
 
-その他のルール（SECURITY-01〜04、06〜07、10〜15）は本エンハンスのスコープ外または既存設計で対応済み（N/A）。
+### FR-03 — フロントエンド: ソート選択 UI の追加
+
+**内容**: `ResourceFilterForm.tsx` に shadcn/ui `<Select>` コンポーネントでソート選択 UI を追加する。
+
+- 選択値を URL パラメータ `sort=field,direction` として付与（Q1=A: 1つのセレクト）
+- 選択肢例: 「登録日時（新しい順）」「登録日時（古い順）」「名称（昇順）」「名称（降順）」「定員（多い順）」「定員（少ない順）」
+- ソート未選択時は `sort` パラメータを URL に含めない（デフォルト動作を維持）
+- リセット時は `sort` もクリア（既存の `router.push("/resources")` で対応）
 
 ---
 
-## 5. プロパティベーステスト要件（PBT — Q4=A 有効）
+## Non-Functional Requirements
 
-本エンハンスのキーワード検索ロジックに識別されたテスタブルプロパティ:
+### NFR-01: テスト追加（Q3=B: BE+FE）
 
-| プロパティカテゴリ | 対象 | 内容 |
+- **バックエンド**: `ResourceServiceTest` にソートケースを追加（name/capacity/createdAt × asc/desc）
+- **フロントエンド**: `resources.test.ts` に Server Action の sort パラメータ引き回しテストを追加
+
+### NFR-02: Security Baseline（Q4=A: 全適用）
+
+本エンハンスは既存認証・認可フロー（JWT + Spring Security）を変更しない。適用されるルールを特定する。
+
+- SECURITY-05（入力バリデーション）: sort パラメータの許容値を明示的に制限する（Spring Data の `Sort` に渡す前に許可フィールドを検証）
+- SECURITY-08（エラーレスポンス）: 無効な sort パラメータでスタックトレースを返さない
+- その他のルール（SECURITY-01/02/03/04/06/07/09/10 等）: 本エンハンスのスコープ外または既存設計で対応済み（N/A）
+
+### NFR-03: Property-Based Testing（Q5=A: 全適用）
+
+本エンハンスのソートロジックに識別されたテスタブルプロパティ:
+
+| プロパティ種別 | 対象コンポーネント | 内容 |
 |---|---|---|
-| **Invariant** (PBT-03) | `keyword` フィルタ結果 | 結果セットはすべて `name` または `description` に `keyword` を含む（大文字小文字無視） |
-| **Invariant** (PBT-03) | `keyword` なし | `keyword=null` 時の結果 ≥ `keyword` 指定時の結果（単調性） |
-| **Idempotence** (PBT-04) | 同一 `keyword` の重複適用 | `filter(filter(list, kw), kw) == filter(list, kw)` |
-
-- PBT フレームワーク: **jqwik**（Java / JUnit 5 統合、PBT-09）
-- 例ベーステストと PBT を併用（PBT-10）
+| **Invariant** (PBT-03) | `listPaginated` ソートロジック | ソート後の結果セットは元の全件数と同じ件数を持つ（要素が増減しない） |
+| **Invariant** (PBT-03) | `listPaginated` ソートロジック | 結果セットの隣接要素は指定フィールド・方向の順序関係を満たす |
+| **Idempotence** (PBT-04) | sort パラメータ解釈 | 同じ `sort=field,dir` を2回適用しても1回と同じ結果 |
 
 ---
 
-## 6. 影響範囲
+## Acceptance Criteria
 
-### バックエンド変更対象
-
-| ファイル | 変更内容 |
-|---|---|
-| `ResourceController.java` | `list()` メソッドに `@RequestParam(required = false) String keyword` 追加、`resourceService.list()` に渡す |
-| `ResourceService.java` | `list()` シグネチャに `keyword` 追加、`listPaginated` / `listWithAvailabilityFilter` に振り分け |
-| `ResourceRepository.java` | `keyword` 対応の `@Query` メソッド追加（JPQL + LOWER/ILIKE）|
-| `ResourceServiceTest.java` | keyword 検索テスト追加（例ベース + PBT）|
-
-### フロントエンド変更対象
-
-| ファイル | 変更内容 |
-|---|---|
-| `ResourceFilterForm.tsx` | `keyword` 入力フィールド追加、`handleSubmit` に `keyword` パラメータ設定 |
-| `ResourceFilterFormProps` | `defaultKeyword?: string` 追加 |
-| 親コンポーネント（`page.tsx`） | `searchParams.keyword` を `ResourceFilterForm` に渡す |
-
-### 仕様書更新対象
-
-| ファイル | 更新箇所 |
-|---|---|
-| `Docs/spec/api-spec.md` | `GET /api/resources` — `keyword` クエリパラメータと挙動を追記 |
-| `Docs/spec/screen-spec.md` | `/resources` — フィルタフォームのキーワード入力欄を追記 |
+- [ ] 名称順（昇順・降順）でリソース一覧を並び替えられる
+- [ ] 定員順（昇順・降順）でリソース一覧を並び替えられる
+- [ ] ソート未選択時は従来どおり登録日時昇順で表示される
+- [ ] カテゴリ・期間フィルタ・キーワード検索との組み合わせでもソートが適用される
+- [ ] バックエンドの既存テストが引き続き pass する
+- [ ] 追加した sort ロジックに対応するテストをバックエンド・フロントエンド両方に追加する
 
 ---
 
-## 7. 受入条件
+## 影響範囲
 
-- [ ] キーワードを入力して絞り込むと、リソース名または説明にそのキーワードを含む結果のみが表示される
-- [ ] キーワードフィールドを空にして「絞り込む」を押すと、キーワード条件が解除される
-- [ ] カテゴリ・期間フィルタとキーワードを同時に指定できる（AND 条件）
-- [ ] `keyword` パラメータ未指定時の動作は既存と変わらない
-- [ ] `ResourceServiceTest` 等の既存テストが引き続き pass する
-- [ ] keyword 検索ロジックに対応するユニットテストをバックエンドに追加する
-- [ ] jqwik による PBT が `ResourceServiceTest` に追加される
-- [ ] JPQL パラメータバインドにより SQL インジェクションが防止される
-
----
-
-## 8. 技術的制約・前提
-
-- Spring Boot 4.0.6 / Java 25 / Gradle Kotlin DSL
-- `ResourceRepository` は `JpaRepository` を継承（JPA Specification パターンは未使用）
-- フロントエンドは Next.js + Shadcn UI（`<Input>`, `<Label>` コンポーネント使用）
-- 認証: JWT（全ロール認証必須、既存ルール維持）
+| ファイル | 変更種別 |
+|---|---|
+| `backend/.../presentation/ResourceController.java` | `sort` パラメータ受け取り（`@RequestParam` または `Pageable` 拡張） |
+| `backend/.../application/ResourceService.java` | sort 分岐・`listWithAvailabilityFilter` の Java ソート |
+| `frontend/.../resources/ResourceFilterForm.tsx` | shadcn/ui `<Select>` でソート選択 UI 追加 |
+| `frontend/src/server/actions/resources.ts` | `sort` パラメータを API リクエストに追加 |
+| `backend/.../ResourceServiceTest.java` | ソートケース追加 |
+| `frontend/tests/unit/server/actions/resources.test.ts` | sort 引き回しテスト追加 |
+| `Docs/spec/api-spec.md` | `GET /api/resources` — `sort` クエリパラメータ追記 |
+| `Docs/spec/screen-spec.md` | `/resources` — ソート選択 UI 追記 |

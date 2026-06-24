@@ -52,6 +52,17 @@ describe("listResourcesAction", () => {
     expect(result.content).toHaveLength(1);
   });
 
+  it("正常時: sort パラメータを渡せる", async () => {
+    // MSW がクエリパラメータを受け取っても同じレスポンスを返す（パラメータ検証はBE側）
+    const result = await listResourcesAction({ sort: "name,asc" });
+    expect(result.content).toHaveLength(1);
+  });
+
+  it("正常時: sort パラメータなしで呼び出せる（デフォルト動作）", async () => {
+    const result = await listResourcesAction({});
+    expect(result.content).toHaveLength(1);
+  });
+
   it("401 時: ApiClientError をスローする", async () => {
     server.use(
       http.get("/api/backend/resources", () => {

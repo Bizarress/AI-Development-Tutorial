@@ -115,9 +115,9 @@ bash scripts/provision-cognito.sh
 
 本リポジトリは AWS Labs の **AI-DLC エンジン**（[`awslabs/aidlc-workflows`](https://github.com/awslabs/aidlc-workflows)、VERSION 0.1.8）を **BookFlow の標準ワークフローとして採用**し、Claude Code を前提とした開発フローを実装しています。`AGENTS.md` は導入しません（Claude Code 専一）。
 
-- **AI-DLC エンジン**：`.claude/rules/aidlc-core.md` が BookFlow 翻案版オーケストレーション。ソフトウェア開発要求に対して INCEPTION（要件分析・設計）→ CONSTRUCTION（実装・テスト）→ OPERATIONS（CI）の 3 フェーズを駆動する。plan mode 経由で発動し、各ステージで承認ゲートを挟む。
+- **AI-DLC エンジン**：**`/aidlc` スキル**がエンジン本体。「AI-DLC で進めて」「aidlc のワークフローで開発したい」等の指定時・`/aidlc` 明示起動時に発動し、INCEPTION（要件分析・設計）→ CONSTRUCTION（実装・テスト）→ OPERATIONS（CI）の 3 フェーズを駆動する。各ステージで承認ゲートを挟み、per-stage 成果物・監査ログを必ず生成する。
 - **Spec-first**：実装より先に `Docs/spec/` を更新する。これが真実の源。`/update-spec` スキルで更新対象を特定する。
-- **plan-first の承認ゲート**：plan mode でエンジンが INCEPTION フェーズを実行し Workflow Planning を提示 → メンター承認（第1ゲート）を得てから実装に進む。
+- **plan-first の承認ゲート**：エンジンが INCEPTION フェーズを実行し Workflow Planning を提示 → `ExitPlanMode` でメンター承認（第1ゲート）を得てから実装に進む。
 - **縦切り実装**：フロントエンド・バックエンドにまたがる変更は機能単位でまとめて実装する（units of work = 縦切り Issue 単位）。
 - **PR**：`/draft-pr` スキルで下書きを生成し、AI 活用箇所を明記する。レビュー（第2ゲート）後にマージする。
 - 検証は「よく使うコマンド」の lint・テストを実行する。
@@ -138,6 +138,7 @@ bash scripts/provision-cognito.sh
 - AI-DLC 採用台帳（32 ファイル全カバレッジ）: `Docs/spec/aidlc-adoption.md`
 - AI-DLC 採用転換 ADR: `Docs/decision/ADR-020-aidlc-engine-adoption.md`
 - OKF frontmatter 部分採用 ADR: `Docs/decision/ADR-021-okf-frontmatter-adoption.md`
-- AI-DLC 翻案版エンジンルール: `.claude/rules/aidlc-core.md`
+- **AI-DLC エンジン本体（`/aidlc` スキル）**: `.claude/skills/aidlc/SKILL.md`
+- AI-DLC エンジンポインタ（薄い参照）: `.claude/rules/aidlc-core.md`
 - AI-DLC 進捗トラッカー: `Docs/spec/aidlc-state.md`
 - AI-DLC 監査ログ: `Docs/spec/aidlc-audit.md`

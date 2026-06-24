@@ -32,6 +32,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 /**
  * {@link ResourceService} 単体テスト（ADR-018 準拠・Mockito）。
@@ -63,6 +64,17 @@ class ResourceServiceTest {
 
   private static Resource makeResource(
       UUID id, String name, ResourceCategory category, boolean isActive, String description) {
+    return makeResource(id, name, category, isActive, description, null, LocalDateTime.of(2025, 4, 1, 9, 0));
+  }
+
+  private static Resource makeResource(
+      UUID id,
+      String name,
+      ResourceCategory category,
+      boolean isActive,
+      String description,
+      Integer capacity,
+      LocalDateTime createdAt) {
     try {
       Resource r = new Resource() {};
       setField(r, "id", id);
@@ -71,7 +83,8 @@ class ResourceServiceTest {
       setField(r, "isActive", isActive);
       setField(r, "requiresApproval", false);
       setField(r, "description", description);
-      setField(r, "createdAt", LocalDateTime.of(2025, 4, 1, 9, 0));
+      setField(r, "capacity", capacity);
+      setField(r, "createdAt", createdAt);
       return r;
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -207,7 +220,7 @@ class ResourceServiceTest {
       when(resourceRepository.findByIsActiveTrue(pageable))
           .thenReturn(new PageImpl<>(java.util.List.of(activeResource)));
 
-      Page<ResourceResponse> result = resourceService.list(null, null, null, false, null, pageable);
+      Page<ResourceResponse> result = resourceService.list(null, null, null, false, null, null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
       assertThat(result.getContent().get(0).id()).isEqualTo(ACTIVE_ID);
@@ -218,7 +231,7 @@ class ResourceServiceTest {
       when(resourceRepository.findAll(pageable))
           .thenReturn(new PageImpl<>(java.util.List.of(activeResource, inactiveResource)));
 
-      Page<ResourceResponse> result = resourceService.list(null, null, null, true, null, pageable);
+      Page<ResourceResponse> result = resourceService.list(null, null, null, true, null, null, pageable);
 
       assertThat(result.getContent()).hasSize(2);
     }
@@ -241,7 +254,7 @@ class ResourceServiceTest {
       when(reservationRepository.findByResource_IdInAndStatusIn(anyCollection(), anyCollection()))
           .thenReturn(java.util.List.of(occupying));
 
-      Page<ResourceResponse> result = resourceService.list(null, from, to, false, null, pageable);
+      Page<ResourceResponse> result = resourceService.list(null, from, to, false, null, null, pageable);
 
       assertThat(result.getContent()).isEmpty();
     }
@@ -260,7 +273,7 @@ class ResourceServiceTest {
       when(reservationRepository.findByResource_IdInAndStatusIn(anyCollection(), anyCollection()))
           .thenReturn(java.util.List.of(adjacent));
 
-      Page<ResourceResponse> result = resourceService.list(null, from, to, false, null, pageable);
+      Page<ResourceResponse> result = resourceService.list(null, from, to, false, null, null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
     }
@@ -273,7 +286,7 @@ class ResourceServiceTest {
       when(resourceRepository.findByIsActiveTrueAndKeyword("%会議%", pageable))
           .thenReturn(new PageImpl<>(java.util.List.of(kaigi)));
 
-      Page<ResourceResponse> result = resourceService.list(null, null, null, false, "会議", pageable);
+      Page<ResourceResponse> result = resourceService.list(null, null, null, false, "会議", null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
       assertThat(result.getContent().get(0).name()).isEqualTo("第1会議室");
@@ -287,7 +300,7 @@ class ResourceServiceTest {
           .thenReturn(new PageImpl<>(java.util.List.of(r)));
 
       Page<ResourceResponse> result =
-          resourceService.list(null, null, null, false, "プロジェクター", pageable);
+          resourceService.list(null, null, null, false, "プロジェクター", null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
     }
@@ -300,7 +313,7 @@ class ResourceServiceTest {
           .thenReturn(new PageImpl<>(java.util.List.of(r)));
 
       Page<ResourceResponse> result =
-          resourceService.list(null, null, null, false, "conference", pageable);
+          resourceService.list(null, null, null, false, "conference", null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
     }
@@ -310,7 +323,7 @@ class ResourceServiceTest {
       when(resourceRepository.findByIsActiveTrue(pageable))
           .thenReturn(new PageImpl<>(java.util.List.of(activeResource)));
 
-      Page<ResourceResponse> result = resourceService.list(null, null, null, false, null, pageable);
+      Page<ResourceResponse> result = resourceService.list(null, null, null, false, null, null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
     }
@@ -320,9 +333,90 @@ class ResourceServiceTest {
       when(resourceRepository.findByIsActiveTrue(pageable))
           .thenReturn(new PageImpl<>(java.util.List.of(activeResource)));
 
-      Page<ResourceResponse> result = resourceService.list(null, null, null, false, "  ", pageable);
+      Page<ResourceResponse> result = resourceService.list(null, null, null, false, "  ", null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
+    }
+
+    // ---- sort テスト（例ベース）----
+
+    @Nested
+    class Sort_ {
+
+      @Test
+      void list_sortByNameAsc_returnsResourcesSortedByName() {
+        Resource zebra =
+            makeResource(
+                UUID.randomUUID(), "Zebra Room", ResourceCategory.ROOM, true, null, null,
+                LocalDateTime.of(2025, 1, 1, 9, 0));
+        Resource alpha =
+            makeResource(
+                UUID.randomUUID(), "Alpha Room", ResourceCategory.ROOM, true, null, null,
+                LocalDateTime.of(2025, 2, 1, 9, 0));
+        Pageable sortedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "name"));
+        when(resourceRepository.findByIsActiveTrue(sortedPageable))
+            .thenReturn(new PageImpl<>(java.util.List.of(alpha, zebra)));
+
+        Page<ResourceResponse> result =
+            resourceService.list(null, null, null, false, null, "name,asc", pageable);
+
+        assertThat(result.getContent().get(0).name()).isEqualTo("Alpha Room");
+      }
+
+      @Test
+      void list_sortByCapacityDesc_passesDescSortToRepository() {
+        Resource big =
+            makeResource(
+                UUID.randomUUID(), "大会議室", ResourceCategory.ROOM, true, null, 100,
+                LocalDateTime.of(2025, 1, 1, 9, 0));
+        Resource small =
+            makeResource(
+                UUID.randomUUID(), "小会議室", ResourceCategory.ROOM, true, null, 10,
+                LocalDateTime.of(2025, 2, 1, 9, 0));
+        Pageable sortedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "capacity"));
+        when(resourceRepository.findByIsActiveTrue(sortedPageable))
+            .thenReturn(new PageImpl<>(java.util.List.of(big, small)));
+
+        Page<ResourceResponse> result =
+            resourceService.list(null, null, null, false, null, "capacity,desc", pageable);
+
+        assertThat(result.getContent().get(0).name()).isEqualTo("大会議室");
+      }
+
+      @Test
+      void list_invalidSortField_fallsBackToDefaultCreatedAtAsc() {
+        Pageable defaultSortPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "createdAt"));
+        when(resourceRepository.findByIsActiveTrue(defaultSortPageable))
+            .thenReturn(new PageImpl<>(java.util.List.of(activeResource)));
+
+        Page<ResourceResponse> result =
+            resourceService.list(null, null, null, false, null, "invalidField,asc", pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+      }
+
+      @Test
+      void list_sortWithTimeFilter_appliesComparatorSort() {
+        LocalDateTime from = LocalDateTime.of(2025, 6, 1, 10, 0);
+        LocalDateTime to = LocalDateTime.of(2025, 6, 1, 12, 0);
+        Resource zebra =
+            makeResource(
+                UUID.randomUUID(), "Zebra Room", ResourceCategory.ROOM, true, null, null,
+                LocalDateTime.of(2025, 1, 1, 9, 0));
+        Resource alpha =
+            makeResource(
+                UUID.randomUUID(), "Alpha Room", ResourceCategory.ROOM, true, null, null,
+                LocalDateTime.of(2025, 2, 1, 9, 0));
+        when(resourceRepository.findByIsActiveTrue()).thenReturn(java.util.List.of(zebra, alpha));
+        when(reservationRepository.findByResource_IdInAndStatusIn(anyCollection(), anyCollection()))
+            .thenReturn(java.util.List.of());
+
+        Page<ResourceResponse> result =
+            resourceService.list(null, from, to, false, null, "name,asc", pageable);
+
+        assertThat(result.getContent().get(0).name()).isEqualTo("Alpha Room");
+        assertThat(result.getContent().get(1).name()).isEqualTo("Zebra Room");
+      }
     }
 
     @Test
@@ -337,7 +431,7 @@ class ResourceServiceTest {
       when(reservationRepository.findByResource_IdInAndStatusIn(anyCollection(), anyCollection()))
           .thenReturn(java.util.List.of());
 
-      Page<ResourceResponse> result = resourceService.list(null, from, to, false, "会議室", pageable);
+      Page<ResourceResponse> result = resourceService.list(null, from, to, false, "会議室", null, pageable);
 
       assertThat(result.getContent()).hasSize(1);
       assertThat(result.getContent().get(0).name()).isEqualTo("会議室A");

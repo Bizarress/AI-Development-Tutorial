@@ -1,73 +1,82 @@
 ---
 type: questions
-title: Requirements Verification Questions — リソース一覧キーワード検索追加
-stage: Requirements Analysis
-status: Awaiting Answers
-timestamp: 2026-06-23T00:00:00Z
+title: 要件確認質問 — リソース一覧のソート順選択
+description: resource-list-sort エンハンスの Requirements Analysis 確認質問
+tags: [ai-dlc, requirements, questions, resource-list-sort]
+timestamp: 2026-06-24
 ---
 
-# 要件確認 — リソース一覧の検索・フィルタ追加
+# 要件確認質問 — リソース一覧のソート順選択
 
-> [Answer]: タグの後に A / B / C / X を記入してください。カスタム回答は X を選択してその後に説明を追記してください。
+エンハンス仕様書（`Docs/spec/enhancements/resource-list-sort.md`）を参照し、
+以下の点を確認します。各 `[Answer]:` タグに選択肢の文字（A/B/C/X）を記入してください。
 
 ---
 
-## Q1. keyword パラメータの入力バリデーション
+## Q1: ソート UI のコンポーネント形式
 
-`keyword` クエリパラメータについて、バックエンド側で入力バリデーションは必要ですか？
+`ResourceFilterForm.tsx` に追加するソート選択 UI の実装形式を選んでください。
 
-A) 最大文字数制限を設ける（例: 100文字以内）- バックエンドで `@RequestParam` にバリデーションアノテーションを付与する
+A) ドロップダウン（shadcn/ui の `<Select>`）— フィールド＋方向を1つのセレクトで選択（例:「名称 昇順」「名称 降順」「定員 昇順」…）
 
-B) バリデーションは設けない - 空文字または null のみ特殊扱い（フィルタ解除）し、長さ制限は行わない
+B) 2つのドロップダウン — フィールド（name/capacity/createdAt）と方向（asc/desc）を分離
 
-X) その他（[Answer] の後に詳細を記入）
+C) ラジオボタングループ — 選択肢を並べて表示
+
+X) Other（[Answer]: タグの下に説明を記入）
+
+[Answer]: A
+
+---
+
+## Q2: ソートパラメータの URL 形式
+
+`GET /api/resources` の `sort` クエリパラメータ形式を選んでください。
+
+A) Spring Data 標準形式 `sort=field,direction`（例: `sort=name,asc`）— `PageableHandlerMethodArgumentResolver` がそのまま解釈できる
+
+B) カスタム形式（例: `sortBy=name&sortDir=asc`）— 独自バリデーションが必要
+
+[Answer]: A
+
+---
+
+## Q3: テストの追加範囲
+
+追加するテストのスコープを選んでください。
+
+A) バックエンドのみ（`ResourceServiceTest` にソートケース追加）
+
+B) バックエンド + フロントエンド（`ResourceServiceTest` + `resources.test.ts` に追加）
 
 [Answer]: B
 
 ---
 
-## Q2. 空き確認フィルタ（from/to）とキーワードの組み合わせ
+## Q4: Security Baseline 拡張
 
-`from`/`to`（空き確認期間）とキーワードを同時指定した場合、キーワードフィルタをどこで適用しますか？
+セキュリティ拡張ルールを本エンハンスに適用しますか？
 
-現在の実装では `from`/`to` 指定時は全候補をDBから取得してJava側でフィルタしています（`listWithAvailabilityFilter`）。
+A) Yes — 全 SECURITY ルールをブロッキング制約として適用（本番品質アプリケーションに推奨）
 
-A) DB レベルで適用 — `keyword` を Repository のクエリに組み込み、DB が絞り込んだ候補のみ取得する（効率的だが、Repository にメソッドが増える）
+B) No — SECURITY ルールをスキップ（PoC・プロトタイプに適した設定）
 
-B) Java レベルで適用 — 全候補取得後に Java の Stream でキーワード絞り込みを行う（実装がシンプルだが、大規模データでは非効率）
-
-X) その他（[Answer] の後に詳細を記入）
-
-[Answer]: B
-
-## Q3. セキュリティ拡張（Security Baseline）
-
-このエンハンスにセキュリティ拡張ルールを適用しますか？
-
-> セキュリティ拡張を有効にすると、入力バリデーション・SQLインジェクション対策・認可ルール等のセキュリティチェックリストが各フェーズで適用されます。
-
-A) Yes — セキュリティルールをブロック制約として適用する（本番グレードのアプリケーションに推奨）
-
-B) No — セキュリティルールをスキップ（PoC・プロトタイプ・学習目的のプロジェクトに適合）
-
-X) その他（[Answer] の後に詳細を記入）
+X) Other（[Answer]: タグの下に説明を記入）
 
 [Answer]: A
 
-## Q4. プロパティベーステスト（Property-Based Testing）
+---
 
-このエンハンスにプロパティベーステストの規約を適用しますか？
+## Q5: Property-Based Testing 拡張
 
-> 有効にすると、純粋関数・データ変換・ビジネスロジックに対してプロパティベーステストを要求するルールが適用されます。
+プロパティベーステスト（PBT）を本エンハンスに適用しますか？
 
-A) Yes — PBT ルールをブロック制約として適用する（ビジネスロジック・データ変換を含むプロジェクトに推奨）
+A) Yes — 全 PBT ルールをブロッキング制約として適用（ビジネスロジック・データ変換に推奨）
 
-B) Partial — 純粋関数・シリアライズのラウンドトリップにのみ適用する
+B) Partial — 純粋関数のみ PBT を適用
 
-C) No — PBT ルールをスキップ（シンプルな CRUD 追加に適合）
+C) No — PBT ルールをスキップ（単純 CRUD・UI のみの場合）
 
-X) その他（[Answer] の後に詳細を記入）
+X) Other（[Answer]: タグの下に説明を記入）
 
 [Answer]: A
-
-> 回答が完了したら、このファイルを保存してください。AI エンジンが回答を確認して要件ドキュメントを生成します。

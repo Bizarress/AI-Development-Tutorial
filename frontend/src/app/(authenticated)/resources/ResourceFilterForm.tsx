@@ -19,6 +19,7 @@ interface ResourceFilterFormProps {
   defaultFrom?: string;
   defaultTo?: string;
   defaultKeyword?: string;
+  defaultSort?: string;
 }
 
 /**
@@ -32,6 +33,7 @@ export function ResourceFilterForm({
   defaultFrom,
   defaultTo,
   defaultKeyword,
+  defaultSort,
 }: ResourceFilterFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -47,11 +49,13 @@ export function ResourceFilterForm({
       const from = data.get("from") as string;
       const to = data.get("to") as string;
       const keyword = data.get("keyword") as string;
+      const sort = data.get("sort") as string;
 
       if (category && category !== "ALL") params.set("category", category);
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       if (keyword && keyword.trim()) params.set("keyword", keyword.trim());
+      if (sort) params.set("sort", sort);
 
       router.push(`/resources?${params.toString()}`);
     },
@@ -93,6 +97,25 @@ export function ResourceFilterForm({
             defaultValue={defaultKeyword ?? ""}
             data-testid="keyword-input"
           />
+        </div>
+
+        {/* 並び順 */}
+        <div className="space-y-1">
+          <Label htmlFor="sort">並び順</Label>
+          <Select name="sort" defaultValue={defaultSort ?? ""}>
+            <SelectTrigger id="sort" data-testid="sort-select">
+              <SelectValue placeholder="デフォルト" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">デフォルト</SelectItem>
+              <SelectItem value="createdAt,asc">登録日時（古い順）</SelectItem>
+              <SelectItem value="createdAt,desc">登録日時（新しい順）</SelectItem>
+              <SelectItem value="name,asc">名称（昇順）</SelectItem>
+              <SelectItem value="name,desc">名称（降順）</SelectItem>
+              <SelectItem value="capacity,asc">定員（少ない順）</SelectItem>
+              <SelectItem value="capacity,desc">定員（多い順）</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* 開始日時 */}

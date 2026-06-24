@@ -13,6 +13,7 @@ import com.example.bookflow.presentation.dto.ResourceResponse;
 import com.example.bookflow.presentation.dto.UpdateResourceRequest;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -20,7 +21,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +46,9 @@ public class ResourceService {
 
   private static final List<ReservationStatus> OCCUPIED_STATUSES =
       List.of(ReservationStatus.PENDING, ReservationStatus.APPROVED);
+
+  private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("name", "capacity", "createdAt");
+  private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.ASC, "createdAt");
 
   private final ResourceRepository resourceRepository;
   private final ReservationRepository reservationRepository;
@@ -79,12 +85,45 @@ public class ResourceService {
       LocalDateTime to,
       boolean isAdmin,
       String keyword,
+      String sortParam,
       Pageable pageable) {
     String normalizedKeyword = normalizeKeyword(keyword);
+    Sort sort = parseSortParam(sortParam);
     if (from != null && to != null) {
-      return listWithAvailabilityFilter(category, from, to, isAdmin, normalizedKeyword, pageable);
+      return listWithAvailabilityFilter(category, from, to, isAdmin, normalizedKeyword, sort, pageable);
     }
-    return listPaginated(category, isAdmin, normalizedKeyword, pageable);
+    return listPaginated(category, isAdmin, normalizedKeyword, sort, pageable);
+  }
+
+  /** sort クエリパラメータを検証済みの Spring Data Sort に変換する（SECURITY-05 許可リスト）。 */
+  Sort parseSortParam(String sortParam) {
+    if (sortParam == null || sortParam.isBlank()) {
+      return DEFAULT_SORT;
+    }
+    String[] parts = sortParam.split(",", 2);
+    String field = parts[0].trim();
+    String direction = parts.length > 1 ? parts[1].trim().toLowerCase(Locale.ROOT) : "asc";
+    if (!ALLOWED_SORT_FIELDS.contains(field)) {
+      return DEFAULT_SORT;
+    }
+    Sort.Direction dir = "desc".equals(direction) ? Sort.Direction.DESC : Sort.Direction.ASC;
+    return Sort.by(dir, field);
+  }
+
+  /** Sort から Resource 用 Comparator を生成する（listWithAvailabilityFilter の Java ソート用）。 */
+  private Comparator<Resource> buildComparator(Sort sort) {
+    if (sort.isUnsorted()) {
+      return Comparator.comparing(Resource::getCreatedAt);
+    }
+    Sort.Order order = sort.iterator().next();
+    Comparator<Resource> comparator =
+        switch (order.getProperty()) {
+          case "name" -> Comparator.comparing(Resource::getName, String.CASE_INSENSITIVE_ORDER);
+          case "capacity" ->
+              Comparator.comparing(Resource::getCapacity, Comparator.nullsLast(Comparator.naturalOrder()));
+          default -> Comparator.comparing(Resource::getCreatedAt);
+        };
+    return order.isAscending() ? comparator : comparator.reversed();
   }
 
   /** null または空白を null に正規化する。 */
@@ -99,33 +138,34 @@ public class ResourceService {
 
   /** from/to 指定なし：条件に応じたリポジトリメソッドを選択してページネーション。 */
   private Page<ResourceResponse> listPaginated(
-      ResourceCategory category, boolean isAdmin, String keyword, Pageable pageable) {
+      ResourceCategory category, boolean isAdmin, String keyword, Sort sort, Pageable pageable) {
+    Pageable sortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     Page<Resource> page;
     if (keyword != null) {
       String pattern = toKeywordPattern(keyword);
       if (isAdmin) {
         page =
             category != null
-                ? resourceRepository.findByCategoryAndKeyword(category, pattern, pageable)
-                : resourceRepository.findAllByKeyword(pattern, pageable);
+                ? resourceRepository.findByCategoryAndKeyword(category, pattern, sortedPageable)
+                : resourceRepository.findAllByKeyword(pattern, sortedPageable);
       } else {
         page =
             category != null
                 ? resourceRepository.findByCategoryAndIsActiveTrueAndKeyword(
-                    category, pattern, pageable)
-                : resourceRepository.findByIsActiveTrueAndKeyword(pattern, pageable);
+                    category, pattern, sortedPageable)
+                : resourceRepository.findByIsActiveTrueAndKeyword(pattern, sortedPageable);
       }
     } else {
       if (isAdmin) {
         page =
             category != null
-                ? resourceRepository.findByCategory(category, pageable)
-                : resourceRepository.findAll(pageable);
+                ? resourceRepository.findByCategory(category, sortedPageable)
+                : resourceRepository.findAll(sortedPageable);
       } else {
         page =
             category != null
-                ? resourceRepository.findByCategoryAndIsActiveTrue(category, pageable)
-                : resourceRepository.findByIsActiveTrue(pageable);
+                ? resourceRepository.findByCategoryAndIsActiveTrue(category, sortedPageable)
+                : resourceRepository.findByIsActiveTrue(sortedPageable);
       }
     }
     return page.map(ResourceResponse::from);
@@ -142,6 +182,7 @@ public class ResourceService {
       LocalDateTime to,
       boolean isAdmin,
       String keyword,
+      Sort sort,
       Pageable pageable) {
     // 1. 候補リソースを全取得（ページネーション前・keyword なし）
     List<Resource> candidates = fetchAllCandidates(category, isAdmin);
@@ -172,7 +213,11 @@ public class ResourceService {
       candidates = candidates.stream().filter(r -> !occupiedIds.contains(r.getId())).toList();
     }
 
-    // 4. フィルタ後リストを手動ページネーション
+    // 4. Java ソートを適用（フィルタ後・ページネーション前）
+    Comparator<Resource> comparator = buildComparator(sort);
+    candidates = candidates.stream().sorted(comparator).toList();
+
+    // 5. フィルタ・ソート後リストを手動ページネーション
     int total = candidates.size();
     int start = (int) pageable.getOffset();
     int end = Math.min(start + pageable.getPageSize(), total);
